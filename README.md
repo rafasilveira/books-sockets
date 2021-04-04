@@ -13,7 +13,11 @@ This project is composed by a mysql database, a client and a server. The server 
 - mysql-connector-python
 
 ## How to use:
-(coming soon)
+- Make sure you have installed all dependencies
+- Replace the dummy credentials in server.py for your MySQL credentials
+- Import the database
+- Make sure `IP` and `PORT` global variables match between server.py and client.py
+- Start both scripts in separate terminals
 
 ## Authors:
 - [rafasilveira](https://github.com/rafasilveira)
