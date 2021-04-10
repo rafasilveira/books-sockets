@@ -2,13 +2,23 @@ import socket
 import sys
 import json
 import threading
+import os
+from dotenv import load_dotenv
+import mysql.connector
+from mysql.connector import Error
+
+
+
+load_dotenv()
+
+DB_HOST = os.getenv('DB_HOST')
+DB_USER = os.getenv('DB_USER')
+DB_NAME = os.getenv('DB_NAME')
+DB_PW = os.getenv('DB_PW')
+DB_PORT = os.getenv('DB_PORT')
 
 IP = 'localhost'
 PORT = 50004
-DB_HOST = 'your.mysql.host'  # todo: replace with host
-DB_USER = 'your.db.user'     # todo: replace with user
-DB_PW = 'your.password'      # todo: replace with password
-DB_PORT = 'yout.db.port'     # todo: replace with db port
 
 def client_thread(client):
     return threading.Thread(target=handler, args=(client,))
@@ -104,23 +114,52 @@ def message(status: str, content: str):
 
 
 def connect_db():
-    print('(not) connecting to db')
+    print('Connecting to db')
+    print(f'DB_HOST: {DB_HOST}')
+    print(f'DB_USER: {DB_USER}')
+    print(f'DB_NAME: {DB_NAME}')
+    print(f'DB_PW: {DB_PW}')
+    print(f'DB_PORT: {DB_PORT}')
+
+    try:
+        connection = mysql.connector.connect(host=DB_HOST,
+                                            database=DB_NAME,
+                                            user=DB_USER,
+                                            password=DB_PW,
+                                            port=DB_PORT)
+        print('connection:')
+        print(connection)
+        if connection.is_connected():
+            db_Info = connection.get_server_info()
+            print("Connected to MySQL Server version ", db_Info)
+            cursor = connection.cursor()
+            cursor.execute("select database();")
+            record = cursor.fetchone()
+            print("You're connected to database: ", record)
+
+    except Error as e:
+        print("Error while connecting to MySQL", e)
+    finally:
+        if connection.is_connected():
+            cursor.close()
+            connection.close()
+            print("MySQL connection is closed")
 
 
 def start_server(ip: str, port: int):
     connect_db()
 
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.bind((ip, port))
-    server_socket.listen(10)
-    print(f'🚀 Socket server ready!')
-    print('Waiting for connections at {ip}:{port}')
+    # server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    # server_socket.bind((ip, port))
+    # server_socket.listen(10)
+    # print(f'🚀 Socket server ready!')
+    # print('Waiting for connections at {ip}:{port}')
 
-    while(True):
-        (client_socket, address) = server_socket.accept()
-        print(f'Receiving connection from {address}')
-        ct = client_thread(client_socket)
-        ct.run()
+    # while(True):
+    #     (client_socket, address) = server_socket.accept()
+    #     print(f'Receiving connection from {address}')
+    #     ct = client_thread(client_socket)
+    #     ct.run()
 
 
 def create_book(data):

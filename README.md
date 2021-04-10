@@ -11,10 +11,11 @@ This project is composed by a mysql database, a client and a server. The server 
 
 ### Dependencies:
 - mysql-connector-python
+- python-dotenv
 
 ## How to use:
 - Make sure you have installed all dependencies
-- Replace the dummy credentials in server.py for your MySQL credentials
+- Copy `.env.example` file, rename it to `.env`, and fill it with your MySQL credentials
 - Import the database
 - Make sure `IP` and `PORT` global variables match between server.py and client.py
 - Start both scripts in separate terminals
