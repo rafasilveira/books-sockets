@@ -7,8 +7,6 @@ from dotenv import load_dotenv
 import mysql.connector
 from mysql.connector import Error
 
-
-
 load_dotenv()
 
 DB_HOST = os.getenv('DB_HOST')
@@ -20,17 +18,21 @@ DB_PORT = os.getenv('DB_PORT')
 IP = 'localhost'
 PORT = 50004
 
-def client_thread(client):
-    return threading.Thread(target=handler, args=(client,))
+
+def client_thread(client, connection):
+    return threading.Thread(target=handler, args=(client, connection))
 
 
-def handler(client):
+def handler(client, connection):
     print('Starting client thread for:')
     print(client)
-    
+
     while True:
-        (d, _, _, _) = client.recvmsg(32768)
-        
+        try:
+            d = client.recv(32768)
+        except Exception as e:
+            d = None
+
         if (d):
             data = json.loads(d.decode())
             if 'option' in data.keys():
@@ -39,7 +41,7 @@ def handler(client):
 
                 # criar livro
                 if opt == 1:
-                    if (create_book(data)):
+                    if (create_book(connection, data)):
                         msg = message(
                             'sucesso', 'livro adicionado com sucesso')
                     else:
@@ -48,8 +50,8 @@ def handler(client):
 
                 # busca por titulo
                 elif opt == 2:
-                    result = get_by_title(data)
-                    if(result is not None):
+                    result = get_by_title(connection, data)
+                    if (result is not None):
                         msg = message(
                             'sucesso', json.dumps(result))
                     else:
@@ -58,8 +60,8 @@ def handler(client):
 
                 # busca por autor
                 elif opt == 3:
-                    result = get_by_author(data)
-                    if(result is not None):
+                    result = get_by_author(connection, data)
+                    if (result is not None):
                         msg = message(
                             'sucesso', json.dumps(result))
                     else:
@@ -68,8 +70,8 @@ def handler(client):
 
                 # busca por ano/edicao
                 elif opt == 4:
-                    result = get_by_year_edition(data)
-                    if(result is not None):
+                    result = get_by_year_edition(connection, data)
+                    if (result is not None):
                         msg = message(
                             'sucesso', json.dumps(result))
                     else:
@@ -78,7 +80,7 @@ def handler(client):
 
                 # remover
                 elif opt == 5:
-                    if(remove(data)):
+                    if (remove(connection, data)):
                         msg = message(
                             'sucesso', 'livro excluído com sucesso')
                     else:
@@ -87,7 +89,7 @@ def handler(client):
 
                 # atualizar
                 elif opt == 6:
-                    update(data)
+                    update(connection, data)
                     msg = message(
                         'successo', 'livro atualizado com sucesso')
 
@@ -102,6 +104,7 @@ def handler(client):
             else:
                 msg = message(
                     'erro', 'key \'option\' not found')
+
             client.send(msg)
         else:
             break
@@ -115,18 +118,18 @@ def message(status: str, content: str):
 
 def connect_db():
     print('Connecting to db')
-    print(f'DB_HOST: {DB_HOST}')
-    print(f'DB_USER: {DB_USER}')
-    print(f'DB_NAME: {DB_NAME}')
-    print(f'DB_PW: {DB_PW}')
-    print(f'DB_PORT: {DB_PORT}')
+    #print(f'DB_HOST: {DB_HOST}')
+    #print(f'DB_USER: {DB_USER}')
+    #print(f'DB_NAME: {DB_NAME}')
+    #print(f'DB_PW: {DB_PW}')
+    #print(f'DB_PORT: {DB_PORT}')
 
     try:
         connection = mysql.connector.connect(host=DB_HOST,
-                                            database=DB_NAME,
-                                            user=DB_USER,
-                                            password=DB_PW,
-                                            port=DB_PORT)
+                                             database=DB_NAME,
+                                             user=DB_USER,
+                                             password=DB_PW,
+                                             port=DB_PORT)
         print('connection:')
         print(connection)
         if connection.is_connected():
@@ -141,58 +144,131 @@ def connect_db():
         print("Error while connecting to MySQL", e)
     finally:
         if connection.is_connected():
-            cursor.close()
-            connection.close()
-            print("MySQL connection is closed")
+            return connection
+
+    raise Exception('Error while connecting to MySQL')
 
 
 def start_server(ip: str, port: int):
-    connect_db()
+    connection = connect_db()
 
-    # server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    # server_socket.bind((ip, port))
-    # server_socket.listen(10)
-    # print(f'🚀 Socket server ready!')
-    # print('Waiting for connections at {ip}:{port}')
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.bind((ip, port))
+    server_socket.listen(10)
+    print(f'🚀 Socket server ready!')
+    print('Waiting for connections at {ip}:{port}')
 
-    # while(True):
-    #     (client_socket, address) = server_socket.accept()
-    #     print(f'Receiving connection from {address}')
-    #     ct = client_thread(client_socket)
-    #     ct.run()
+    while True:
+        (client_socket, address) = server_socket.accept()
+        print(f'Receiving connection from {address}')
+        ct = client_thread(client_socket, connection)
+        ct.run()
 
 
-def create_book(data):
+def create_book(connection, data):
     print('Create book')
     print(data)
     return True
 
 
-def get_by_title(data):
-    print('Get by title')
-    print(data)
-    return True
+def get_by_title(connection, data):
+    query = "SELECT ls.codigo as codigo, " \
+            "TRIM(ls.titulo) as titulo, " \
+            "GROUP_CONCAT(DISTINCT TRIM(ar.nome) SEPARATOR ' & ') as autor, " \
+            "GROUP_CONCAT(DISTINCT eo.numero SEPARATOR ', ') as edicao, " \
+            "GROUP_CONCAT(DISTINCT eo.ano SEPARATOR ', ') as edicao " \
+            "FROM livros ls " \
+            "INNER JOIN livroautor la ON ls.codigo = la.codigolivro " \
+            "INNER JOIN autor ar ON la.codigoautor = ar.codigo " \
+            "INNER JOIN edicao eo ON ls.codigo = eo.codigolivro " \
+            "WHERE ls.titulo LIKE '%" + data['title'] + "%'" \
+            "GROUP BY ls.codigo " \
+            "ORDER BY ls.titulo ASC"
+
+    cursor = connection.cursor()
+    cursor.execute(query)
+
+    records = cursor.fetchall()
+
+    return str(records)
 
 
-def get_by_author(data):
-    print('Get by author')
-    print(data)
-    return True
+def get_by_author(connection, data):
+    query = "SELECT ls.codigo as codigo, " \
+            "TRIM(ls.titulo) as titulo, " \
+            "GROUP_CONCAT(DISTINCT TRIM(ar.nome) SEPARATOR ' & ') as autor, " \
+            "GROUP_CONCAT(DISTINCT eo.numero SEPARATOR ', ') as edicao, " \
+            "GROUP_CONCAT(DISTINCT eo.ano SEPARATOR ', ') as edicao " \
+            "FROM livros ls " \
+            "INNER JOIN livroautor la ON ls.codigo = la.codigolivro " \
+            "INNER JOIN autor ar ON la.codigoautor = ar.codigo " \
+            "INNER JOIN edicao eo ON ls.codigo = eo.codigolivro " \
+            "WHERE ar.nome LIKE '%" + data['title'] + "%'" \
+            "GROUP BY ls.codigo " \
+            "ORDER BY ls.titulo ASC"
+
+    cursor = connection.cursor()
+    cursor.execute(query)
+
+    records = cursor.fetchall()
+
+    return str(records)
 
 
-def get_by_year_edition(data):
-    print('Get by year/edition')
-    print(data)
-    return True
+def get_by_year_edition(connection, data):
+    query = "SELECT ls.codigo as codigo, " \
+            "TRIM(ls.titulo) as titulo, " \
+            "GROUP_CONCAT(DISTINCT TRIM(ar.nome) SEPARATOR ' & ') as autor, " \
+            "GROUP_CONCAT(DISTINCT eo.numero SEPARATOR ', ') as edicao, " \
+            "GROUP_CONCAT(DISTINCT eo.ano SEPARATOR ', ') as edicao " \
+            "FROM livros ls " \
+            "INNER JOIN livroautor la ON ls.codigo = la.codigolivro " \
+            "INNER JOIN autor ar ON la.codigoautor = ar.codigo " \
+            "INNER JOIN edicao eo ON ls.codigo = eo.codigolivro " \
+            "WHERE eo.numero = " + data['edition'] + " AND eo.ano = " + data['year'] + " " \
+            "GROUP BY ls.codigo " \
+            "ORDER BY ls.titulo ASC"
+
+    cursor = connection.cursor()
+    cursor.execute(query)
+
+    records = cursor.fetchall()
+
+    return str(records)
 
 
-def remove(data):
-    print('remove book')
-    print(data)
-    return True
+def remove(connection, data):
+    cursor = connection.cursor()
+
+    query = "SELECT ls.codigo as codigo FROM livros ls WHERE TRIM(ls.titulo) = '" + data['title'].strip() + "'"
+    cursor.execute(query)
+    record = cursor.fetchone()
+
+    id = None
+    for r in record:
+        id = r
+
+    if id is None:
+        raise Exception('No books were found.')
+
+    query = "DELETE FROM livroautor WHERE codigolivro = " + str(id)
+    cursor.execute(query)
+    connection.commit()
+
+    query = "DELETE FROM edicao WHERE codigolivro = " + str(id)
+    cursor.execute(query)
+    connection.commit()
+
+    query = "DELETE FROM livros WHERE codigo = " + str(id)
+    cursor.execute(query)
+    connection.commit()
+
+    amount = str(cursor.rowcount)
+
+    return amount
 
 
-def update(data):
+def update(connection, data):
     print('update book')
     print(data)
     return True
