@@ -15,7 +15,7 @@ def connect(ip, port):
 def send(connection, message: dict):
     msg = json.dumps(message)
     connection.send(msg.encode())
-    (response, _, _, _) = connection.recvmsg(32768)
+    response = connection.recv(32768)
 
     return response
 
@@ -131,6 +131,7 @@ def run():
         connection.close()
     except Exception as e:
         print(e)
+        wait = input()
 
 
 run()
