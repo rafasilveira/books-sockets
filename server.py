@@ -1,6 +1,6 @@
 import socket
 import sys
-import json
+import simplejson as json
 import threading
 import os
 from dotenv import load_dotenv
@@ -16,7 +16,11 @@ DB_PW = os.getenv('DB_PW')
 DB_PORT = os.getenv('DB_PORT')
 
 IP = 'localhost'
-PORT = 50004
+PORT = 50512
+
+
+def message(code: str, status: str, content: any):
+    return json.dumps({'status': status, 'content': content, 'code': code}).encode()
 
 
 def client_thread(client, connection):
@@ -37,83 +41,79 @@ def handler(client, connection):
             data = json.loads(d.decode())
             if 'option' in data.keys():
                 opt = int(data['option'])
-                msg = message('', '')
+                msg = message('', '', '')
 
                 # criar livro
                 if opt == 1:
                     if (create_book(connection, data)):
-                        msg = message(
-                            'sucesso', 'livro adicionado com sucesso')
+                        msg = message('create_book',
+                                      'sucesso', 'livro adicionado com sucesso')
                     else:
-                        msg = message(
-                            'erro', 'houve um problema ao adicionar o livro.')
+                        msg = message('create_book',
+                                      'erro', 'houve um problema ao adicionar o livro.')
 
                 # busca por titulo
                 elif opt == 2:
                     result = get_by_title(connection, data)
-                    if (result is not None):
-                        msg = message(
-                            'sucesso', json.dumps(result))
+                    if (len(result) > 0):
+                        msg = message('get_book',
+                                      'sucesso', result)
                     else:
-                        msg = message(
-                            'erro', 'não foi encontrado nenhum livro com esse título')
+                        msg = message('get_book',
+                                      'erro', 'não foi encontrado nenhum livro com esse título')
 
                 # busca por autor
                 elif opt == 3:
                     result = get_by_author(connection, data)
-                    if (result is not None):
-                        msg = message(
-                            'sucesso', json.dumps(result))
+                    if (len(result) > 0):
+                        msg = message('get_book',
+                                      'sucesso', result)
                     else:
-                        msg = message(
-                            'erro', 'não foi encontrado nenhum livro com esse autor')
+                        msg = message('get_book',
+                                      'erro', 'não foi encontrado nenhum livro com esse autor')
 
                 # busca por ano/edicao
                 elif opt == 4:
                     result = get_by_year_edition(connection, data)
-                    if (result is not None):
-                        msg = message(
-                            'sucesso', json.dumps(result))
+                    if (len(result) > 0):
+                        msg = message('get_book',
+                                      'sucesso', result)
                     else:
-                        msg = message(
-                            'erro', 'não foi encontrado nenhum livro com esse ano/edição')
+                        msg = message('get_book',
+                                      'erro', 'não foi encontrado nenhum livro com esse ano/edição')
 
                 # remover
                 elif opt == 5:
                     if (remove(connection, data)):
-                        msg = message(
-                            'sucesso', 'livro excluído com sucesso')
+                        msg = message('remove_book',
+                                      'sucesso', 'livro excluído com sucesso')
                     else:
-                        msg = message(
-                            'erro', 'não foi possível excluir o livro')
+                        msg = message('remove_book',
+                                      'erro', 'não foi possível excluir o livro')
 
                 # atualizar
                 elif opt == 6:
                     update(connection, data)
-                    msg = message(
-                        'successo', 'livro atualizado com sucesso')
+                    msg = message('update_book'
+                                  'successo', 'livro atualizado com sucesso')
 
                 # sair
                 elif opt == 0:
                     print('client left:')
                     print(client)
-                    msg = message('sucesso', 'você desconectou')
+                    msg = message('logout', 'sucesso', 'você desconectou')
                     client.send(msg)
                     break
 
             else:
-                msg = message(
-                    'erro', 'key \'option\' not found')
+                msg = message('generic_error',
+                              'erro', 'key \'option\' not found')
 
             client.send(msg)
         else:
             break
 
     client.close()
-
-
-def message(status: str, content: str):
-    return json.dumps({'status': status, 'content': content}).encode()
 
 
 def connect_db():
@@ -156,7 +156,7 @@ def start_server(ip: str, port: int):
     server_socket.bind((ip, port))
     server_socket.listen(10)
     print(f'🚀 Socket server ready!')
-    print('Waiting for connections at {ip}:{port}')
+    print(f'Waiting for connections at {ip}:{port}')
 
     while True:
         (client_socket, address) = server_socket.accept()
@@ -190,7 +190,7 @@ def get_by_title(connection, data):
 
     records = cursor.fetchall()
 
-    return str(records)
+    return records
 
 
 def get_by_author(connection, data):
@@ -203,7 +203,7 @@ def get_by_author(connection, data):
             "INNER JOIN livroautor la ON ls.codigo = la.codigolivro " \
             "INNER JOIN autor ar ON la.codigoautor = ar.codigo " \
             "INNER JOIN edicao eo ON ls.codigo = eo.codigolivro " \
-            "WHERE ar.nome LIKE '%" + data['title'] + "%'" \
+            "WHERE ar.nome LIKE '%" + data['author'] + "%'" \
             "GROUP BY ls.codigo " \
             "ORDER BY ls.titulo ASC"
 
@@ -212,7 +212,7 @@ def get_by_author(connection, data):
 
     records = cursor.fetchall()
 
-    return str(records)
+    return records
 
 
 def get_by_year_edition(connection, data):
@@ -234,13 +234,14 @@ def get_by_year_edition(connection, data):
 
     records = cursor.fetchall()
 
-    return str(records)
+    return records
 
 
 def remove(connection, data):
     cursor = connection.cursor()
 
-    query = "SELECT ls.codigo as codigo FROM livros ls WHERE TRIM(ls.titulo) = '" + data['title'].strip() + "'"
+    query = "SELECT ls.codigo as codigo FROM livros ls WHERE TRIM(ls.titulo) = '" + \
+        data['title'].strip() + "'"
     cursor.execute(query)
     record = cursor.fetchone()
 

@@ -1,8 +1,8 @@
 import socket
-import json
+import simplejson as json
 
 IP = 'localhost'
-PORT = 50004
+PORT = 50512
 
 
 def connect(ip, port):
@@ -13,11 +13,33 @@ def connect(ip, port):
 
 
 def send(connection, message: dict):
-    msg = json.dumps(message)
-    connection.send(msg.encode())
-    response = connection.recv(32768)
+    msg = json.dumps(message).encode()
+    connection.send(msg)
+    res = connection.recv(32768)
+    return json.loads(res.decode())
 
-    return response
+
+def handleResponse(response):
+    if (response['status'] == 'sucesso'):
+
+        # Busca por livro
+        if (response['code'] == 'get_book'):
+            if (len(response['content']) > 0):
+                print('id \t| ano \t| edicao \t| titulo \t| autor ')
+                for row in response['content']:
+                    id, title, author, edition, year = row
+                    print(f'{id} \t| {year} \t| {edition} \t| {title} \t| {author}')
+            else:
+                print('Nenhum livro encontrado.')
+
+        # Criar livro
+        if (response['code'] in ['create_book', 'update_book', 'remove_book', 'update_book'] ):
+            print(response['content'])
+
+
+    if (response['status'] != 'sucesso'):
+        print(f"Erro: {response['content']}")
+                    
 
 
 def run():
@@ -125,8 +147,7 @@ def run():
                     response = send(connection, {'option': 0})
                     break
 
-            print('\n')
-            print(response)
+            handleResponse(response)
 
         connection.close()
     except Exception as e:
