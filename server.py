@@ -33,7 +33,7 @@ def handler(client, connection):
 
     while True:
         try:
-            d = client.recv(32768)
+            d = client.recv(1048576)
         except Exception as e:
             d = None
 
@@ -94,7 +94,7 @@ def handler(client, connection):
                 # atualizar
                 elif opt == 6:
                     update(connection, data)
-                    msg = message('update_book'
+                    msg = message('update_book',
                                   'successo', 'livro atualizado com sucesso')
 
                 # sair
@@ -166,9 +166,58 @@ def start_server(ip: str, port: int):
 
 
 def create_book(connection, data):
-    print('Create book')
-    print(data)
-    return True
+    cursor = connection.cursor()
+
+    query = "SELECT MAX(l.codigo)+1 AS proximo_codigo FROM livros l"
+    cursor.execute(query)
+    record = cursor.fetchone()
+
+    idBook = None
+    for r in record:
+        idBook = r
+
+    query = "INSERT INTO livros (codigo, titulo) VALUES (" + str(idBook) + ", '" + data['title'].strip() + "') "
+
+    cursor = connection.cursor()
+    cursor.execute(query)
+
+    if cursor.rowcount == 0:
+        raise Exception('An insertion error has occurred [livros]')
+
+    query = "SELECT a.codigo as codigo FROM autor a WHERE TRIM(a.nome) = '" + \
+            data['author'].strip() + "'"
+    cursor.execute(query)
+    record = cursor.fetchone()
+
+    if record is None:
+        raise Exception('No authors were found.')
+
+    idAuthor = None
+    for r in record:
+        idAuthor = r
+
+    if idAuthor is None:
+        raise Exception('No authors were found')
+
+    query = "INSERT INTO livroautor (codigolivro, codigoautor) VALUES (" + str(idBook) + ", " + str(idAuthor) + ") "
+
+    cursor = connection.cursor()
+    cursor.execute(query)
+
+    if cursor.rowcount == 0:
+        raise Exception('An insertion error has occurred [livroautor]')
+
+    query = "INSERT INTO edicao (codigolivro, numero, ano) VALUES (" + str(idBook) + ", " + data['edition'].strip() + ", " + data['year'].strip() + ") "
+
+    cursor = connection.cursor()
+    cursor.execute(query)
+
+    if cursor.rowcount == 0:
+        raise Exception('An insertion error has occurred [edicao]')
+
+    connection.commit()
+
+    return cursor.rowcount
 
 
 def get_by_title(connection, data):
@@ -245,6 +294,9 @@ def remove(connection, data):
     cursor.execute(query)
     record = cursor.fetchone()
 
+    if record is None:
+        raise Exception('No books were found.')
+
     id = None
     for r in record:
         id = r
@@ -270,9 +322,54 @@ def remove(connection, data):
 
 
 def update(connection, data):
-    print('update book')
-    print(data)
-    return True
+    cursor = connection.cursor()
+
+    query = "SELECT ls.codigo as codigo FROM livros ls WHERE TRIM(ls.titulo) = '" + \
+            data['old_title'].strip() + "'"
+    cursor.execute(query)
+    record = cursor.fetchone()
+
+    if record is None:
+        raise Exception('No books were found.')
+
+    idBook = None
+    for r in record:
+        idBook = r
+
+    if idBook is None:
+        raise Exception('No books were found.')
+
+    if len(data['title'].strip()) > 0:
+        query = "UPDATE livros SET titulo = '" + data['title'].strip() + "' WHERE codigo = " + str(idBook)
+        cursor.execute(query)
+
+    if len(data['author'].strip()) > 0:
+        query = "SELECT a.codigo as codigo FROM autor a WHERE TRIM(a.nome) = '" + \
+                data['author'].strip() + "'"
+        cursor.execute(query)
+        record = cursor.fetchone()
+
+        idAuthor = None
+        for r in record:
+            idAuthor = r
+
+        if idAuthor is None:
+            raise Exception('No authors were found')
+
+        query = "UPDATE livroautor SET codigoautor = " + str(idAuthor) + " WHERE codigolivro = " + str(idBook)
+        cursor.execute(query)
+
+    if len(data['edition'].strip()) > 0:
+        query = "UPDATE edicao SET numero = " + data['edition'].strip() + " WHERE codigolivro = " + str(idBook)
+        cursor.execute(query)
+
+    if len(data['year'].strip()) > 0:
+        query = "UPDATE edicao SET ano = " + data['year'].strip() + " WHERE codigolivro = " + str(idBook)
+        cursor.execute(query)
+
+    connection.commit()
+
+    return 1
 
 
 if __name__ == '__main__':
