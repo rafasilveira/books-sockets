@@ -15,7 +15,7 @@ def connect(ip, port):
 def send(connection, message: dict):
     msg = json.dumps(message).encode()
     connection.send(msg)
-    res = connection.recv(32768)
+    res = connection.recv(1048576)
     return json.loads(res.decode())
 
 
@@ -33,13 +33,11 @@ def handleResponse(response):
                 print('Nenhum livro encontrado.')
 
         # Criar livro
-        if (response['code'] in ['create_book', 'update_book', 'remove_book', 'update_book'] ):
+        if (response['code'] in ['create_book', 'update_book', 'remove_book', 'update_book']):
             print(response['content'])
 
-
     if (response['status'] != 'sucesso'):
-        print(f"Erro: {response['content']}")
-                    
+        print(f"Mensagem: {response['content']}")
 
 
 def run():
@@ -141,7 +139,7 @@ def run():
                         "year": year
                     }
 
-                    response = send(connection, str(book))
+                    response = send(connection, book)
 
                 elif option == 0:
                     response = send(connection, {'option': 0})
